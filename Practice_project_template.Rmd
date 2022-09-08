@@ -1,0 +1,155 @@
+---
+title: "Practice STAR Project Data Analysis Report"
+author: "Tina Lagerblad, 920152698"
+date: "2/4/2022"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+library(tidyverse)
+```
+
+***
+
+***
+
+# Abstract 
+
+  In this project we will be trying to conclude if 1st grade class types influence math test scores, and if so, which model is the most effective. The data this project is based upon comes from Tennessee's Student/Teacher Achievement Ratio study (Project STAR), which was conducted in the 1980's over the course of 4 years, spanning from Kindergarden to 3rd grade and covering multiple variables. The mean of 1st grade math scores across class types is is used to model this data. This allows us to come to the conclusion that 1st grade math scores are influenced by class type, and that the highest scoring class type out of the ones tested is a small class size. Also, that adding an aide to a regular class size does not make for a statistically significant improvement in math test scores cas opposed to regular class sizes without an aide.
+
+# Introduction
+
+  The main question we are interested in answering from this study is whether of not 1st grade class types influence math scores. If this is found to be true, we wish to answer the question of which class type in particular is the most effective in producing the highest scores. The motivation behind this analysis was to find the most effective classroom model for students in terms of highest test scores. From this analysis we are provided with information regarding which classroom models are the best in this regard, and should thus be implemented (Achilles, 2012). This study may effect a change in classroom models to match those that have been proven to be most suitable.
+ 
+# Background 
+
+  The Tennessee's Student/Teacher Achievement Ratio study (Project STAR) was conducted over 4 years by the State Department of Education in order to investigate what class model (small class, regular class or regular + aide class) would produce the highest test scores for grades kindergarten through third grade (Achilles et al,, 2008). I collected the data from Harvard dataverse, which has compiled raw data from the experiment in Tennessee, starting in 1985 and spanning 4 years (Achilles et al., 2008).
+  The experiment was conducted in 79 schools, across which over 7,000 students in grades K-3 were randomly assigned to one of the aforementioned class models with a randomly assigned teacher, making this a randomized study (Achilles et al., 2008). Test score results were collected as the students entered each school year a measure of each class model's success (Achilles et al., 2008).
+  This data includes the following information as variables for each grade: demographics, school and class ID, school/teacher ID, class type, test scores and motivation/self-concept scores (Achilles et al., 2008). We will be focusing on the variables school/teacher ID and class type in reference to 1st graders for our analysis.
+
+# Descriptive analysis 
+
+  The reason mean was chosen because it is a basic summary that can easily be compared across class type and class ID. Mean is a good reflection of average scores with data excluding significant outlier values that may skew data.
+
+```{r}
+library(haven)
+
+STAR = read_sav("./STAR_Students.sav")
+
+avai_id = which(!is.na(STAR$g1tmathss))
+data = STAR[avai_id,c("g1tmathss", "g1schid", "g1classtype", "g1tchid")]
+sum(is.na(data))
+dim(data)
+head(data)
+
+data2 = data %>%
+          group_by(g1tchid) %>%
+          summarise(mean_score=mean(g1tmathss), 
+                    g1schid=unique(g1schid), 
+                    g1classtype=unique(g1classtype)) %>%
+          mutate(class_type = as_factor(g1classtype, levels="labels"),
+                 school_id = as_factor(g1schid),
+                 teacher_id = as_factor(g1tchid), 
+                 .keep = "unused")
+dim(data2)
+head(data2)
+
+```
+
+
+- Outcome v.s. class types: 
+
+```{r}
+ggplot(data=data2, mapping=aes(x=class_type, y=mean_score)) +
+  geom_boxplot() +
+  xlab("Class Type")
+```
+
+- Outcome v.s. school IDs: 
+
+```{r}
+ggplot(data=data2, mapping=aes(x=school_id, y=mean_score)) +
+  geom_boxplot() +
+  xlab("school id")
+
+tmp = data2 %>% 
+        group_by(school_id) %>%
+        summarise(sch_mean=mean(mean_score)) 
+summary(tmp$sch_mean)
+``` 
+
+# Inferential analysis 
+
+  We first fit the data to the two-way ANOVA model:
+$Y_{ijk} = \mu_{..} + \alpha_{i} + \beta_{j} + \epsilon_{ijk}$
+
+  I chose to fit the data to a two-way ANOVA model as opposed to one including interaction terms because we are not interested in knowing if there is interaction between school id and class type from this model, we only wish to know if the parameters have individual significant effects on the outcome. The resulting two-way ANOVA table tells us that there is class type does have a statistically significant effect on mean score.
+
+  Assumptions for this model are observation and error distribution normality, independence, equal variance and balancedness. The parameters for index i are class size: small(i=1), regular(i=2), and regular + aide(i=3). The parameters for index j are school id, with each j, going from 1 to 76, representing a distinct school id.
+
+```{r}
+model1 = aov(mean_score~school_id+class_type, data=data2)
+summary(model1)
+```
+
+  Tukey's HSD test is appropriate here because it shows us specifically which levels within the parameter we believe to be significant are significantly different from each other. Tukey's HSD test will tell us specifically which class type's test scores are significantly different compared to the each other (Bevans, 2021).
+
+  Significance level of this test is 0.05. Assumptions for this model are observation and error distribution normality, independence and equal variance.
+
+  From our results we can see the pairwise differences between the three class types and thus interpret which have significant differences. This Tukey HSD model has shown that there is a statistically significant pairwise difference between the class types "REGULAR CLASS" and "SMALL CLASS" (-12.955 points), as well as between "REGULAR + AIDE CLASS" and "SMALL CLASS" (-11.069 points), but not between "REGULAR + AIDE CLASS" and "REGULAR CLASS" (Bevans, 2021).
+
+```{r}
+TukeyHSD(model1, "class_type")
+```
+
+# Sensitivity analysis 
+
+  Through the Residuals vs Fitted plot, we can assume constancy of error since there is pretty equal dispersion of residuals around zero and across treatment groups, as seen by the red line very closely matching zero.
+
+  By looking at the Normal Q-Q plot, we can likely assume normality, since there is minimal departure with our observations from the line pattern. Our tails are thin and curve slightly, but not enough for non-normality to be assumed.  
+
+  From the Scale-Location graph, we are able to verify the equal variance assumption of our models. This is due to the fact that the red line we se see going across fitted values is approximately horizontal, as well as the spread around the red line not varying much across fitted values (Alex, 2020).
+
+  Since none of our observations appear to fall outside of the Cook's distance in the Residuals vs.Leverage plot, we have no influential observations. This is a good indicator that our chosen model is a good fit for the data, since we have no influential observations (Zach, 2021).
+  
+```{r}
+plot(model1)
+```
+
+# Discussion 
+
+  The intent of this project was to answer the question of whether of not 1st grade class types influence math scores, and if so, which class type in particular is the most effective in producing the highest scores. What was found was that there was indeed influence from class type on 1st grade math scores. 
+  Specifically, by fitting the relevant data to the two-way ANOVA model, we can conclude that class type does have a statistically significant effect on mean 1st grade math scores. Additionally, Tukey's HSD model proves that smaller class sized made for higher test scores than regular class sizes, and that smaller classes also resulted in higher scores than regular class sizes with an aide. However, there was no statistically significant difference between regular classes with or without an aide. 
+  These results suggest that we should implement small class sizes in order to have 1st graders produce the highest math test scores, compared to the other tested models.     A caveat of this analysis are that only three class models were analyzed, so the statement that small class sizes are the best can not be generalized. Another limitation is that only 1st graders and math scores were analyzed, so we can not assume that this conclusion will hold accross all grades and subject matters.
+
+
+# Acknowledgement {-}
+
+N/A
+
+# Reference {-}
+
+Achilles, C. M. (2012, September 30). Class-size policy: The Star Experiment and related class-size studies. NCPEA policy brief. volume 1, Number 2. NCPEA Publications. Retrieved February 5, 2022, from https://eric.ed.gov/?id=ED540485 
+
+Achilles, C. M., Bain, H. P., Bellott, F., Boyd-Zaharias, J., Finn, J., Folger, J., Johnston, J., &amp; Word, E. (2008, October 7). Tennessee's student teacher achievement ratio (STAR) project. Harvard Dataverse. Retrieved February 4, 2022, from https://dataverse.harvard.edu/dataset.xhtml?persistentId=hdl%3A1902.1%2F10766 
+
+Alex. (2020, May 20). The scale location plot: Interpretation in R. Boostedml. Retrieved February 4, 2022, from https://boostedml.com/2019/03/linear-regression-plots-scale-location-plot.html 
+
+Bevans, R. (2021, January 7). An introduction to the two-way ANOVA. Scribbr. Retrieved February 4, 2022, from https://www.scribbr.com/statistics/two-way-anova/#:~:text=A%20two%2Dway%20ANOVA%20is,combination%2C%20affect%20a%20dependent%20variable
+
+Zach. (2021, September 7). What is a residuals vs. leverage plot? (definition &amp; example). Statology. Retrieved February 4, 2022, from https://www.statology.org/residuals-vs-leverage-plot/ 
+
+
+# Session info {-}
+
+<span style='color:blue'>
+Report information of your `R` session for reproducibility. 
+</span> 
+
+
+```{r}
+sessionInfo()
+```
